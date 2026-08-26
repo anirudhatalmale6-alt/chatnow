@@ -17,16 +17,9 @@
   };
 
   /* ------------------------------ thème ------------------------------ */
-  var root = document.documentElement;
-  var pref = localStorage.getItem('cn-theme');
-  if (pref) root.setAttribute('data-theme', pref);
-  else if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) root.setAttribute('data-theme', 'dark');
-  var majTheme = function () { $('theme').textContent = root.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙'; };
-  majTheme();
-  $('theme').onclick = function () {
-    var d = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', d); localStorage.setItem('cn-theme', d); majTheme();
-  };
+  /* Le thème est déjà appliqué par theme.js, chargé dans <head> : ici on ne
+     branche que le menu de choix. */
+  if (window.CNTheme) window.CNTheme.menu($('theme'));
 
   /* ------------------------------ état ------------------------------- */
   var moi = null;
@@ -38,8 +31,40 @@
   var membres = [];
   var enTrainEcrire = {};
   var fiche = null;
+  var profils = {};      // clé -> { nom, court, couleur }
+
+  fetch('/api/profils').then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) return;
+    d.profils.forEach(function (p) { profils[p.cle] = p; });
+    rendreMembres();
+  }).catch(function () { /* la liste s'affiche sans étiquette de profil */ });
+
+  /* Distance à vol d'oiseau (haversine). Les coordonnées reçues sont
+     arrondies au kilomètre par le serveur : le résultat est approximatif,
+     et l'affichage le dit. */
+  function distanceKm(a, b) {
+    if (!a || !b || a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null;
+    var R = 6371, rad = function (d) { return d * Math.PI / 180; };
+    var dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)));
+  }
+
+  function distanceTexte(km) {
+    if (km === null) return '';
+    if (km < 1) return "moins d'1 km";
+    if (km < 10) return Math.round(km) + ' km';
+    if (km < 100) return Math.round(km / 5) * 5 + ' km';
+    return Math.round(km / 10) * 10 + ' km';
+  }
 
   var socket = io({ transports: ['websocket', 'polling'] });
+
+  var voix = new window.CNVoix(socket, {
+    avis: function (t) { avis(t); },
+    majListe: function () { rendreVoix(); rendreMembres(); },
+  });
 
   /* --------------------------- bandeau réseau ------------------------ */
   var net = $('net');
@@ -89,7 +114,7 @@
   socket.on('session', function (u) {
     moi = u;
     $('me').innerHTML = '<span class="avatar" style="background:' + esc(u.color) + '">' + esc(u.pseudo[0]) + '</span>' +
-      '<span class="nm">' + esc(u.pseudo) + '</span>' +
+      '<span class="nm">' + esc(u.pseudo) + (u.city ? '<div class="meta">' + esc(u.city) + '</div>' : '') + '</span>' +
       '<button class="ghost quit" id="quit" title="Quitter le tchat">⎋</button>';
     $('quit').onclick = function () {
       fetch('/api/quit', { method: 'POST' }).then(function () { location.href = '/'; });
@@ -145,9 +170,10 @@
     rendreTabs();
     rendreVue();
     rendreMembres();
+    rendreBarreSalon();
   });
 
-  socket.on('users', function (us) { membres = us; rendreMembres(); });
+  socket.on('users', function (us) { membres = us; rendreMembres(); rendreVoix(); });
 
   /* ---------------------------- messages ----------------------------- */
   socket.on('message', function (m) {
@@ -259,7 +285,7 @@
         var t = el.getAttribute('data-t');
         if (t === 'room') { vue = { type: 'room', key: salonActuel && salonActuel.slug }; }
         else { conversations[t].unread = 0; vue = { type: 'pm', key: t }; }
-        rendreTabs(); rendreVue();
+        rendreTabs(); rendreVue(); rendreBarreSalon();
       };
     });
   }
@@ -327,17 +353,109 @@
   /* ---------------------------- connectés ---------------------------- */
   function rendreMembres() {
     $('userCount').textContent = membres.length;
-    var sexe = { h: '♂', f: '♀', a: '' };
-    $('userList').innerHTML = membres.map(function (u) {
-      var det = [u.age || '', sexe[u.gender] || '', u.region || ''].filter(Boolean).join(' · ');
-      return '<div class="user' + (ignores.has(u.uid) ? ' ign' : '') + '" data-uid="' + esc(u.uid) + '">' +
+
+    /* Classement : d'abord les plus proches, ensuite ceux dont on ne connaît
+       pas la position. Sans le second critère, les personnes sans ville
+       remonteraient en tête avec une distance nulle, ce qui serait faux. */
+    var liste = membres.slice().sort(function (a, b) {
+      /* Soi-même toujours en tête, et signalé : sinon on se cherche dans la
+         liste sans se reconnaître, la distance affichée étant nulle. */
+      if (moi && a.uid === moi.uid) return -1;
+      if (moi && b.uid === moi.uid) return 1;
+      var da = distanceKm(moi, a), db = distanceKm(moi, b);
+      if (da === null && db === null) return a.pseudo.localeCompare(b.pseudo);
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return da - db;
+    });
+
+    $('userList').innerHTML = liste.map(function (u) {
+      var p = profils[u.gender] || null;
+      var estMoi = moi && u.uid === moi.uid;
+      var km = estMoi ? null : distanceKm(moi, u);
+      var meta = '';
+      if (u.age) meta += '<span>' + u.age + ' ans</span>';
+      if (p && p.court) meta += '<span class="prof" style="color:' + esc(p.couleur) + '">' + esc(p.court) + '</span>';
+      if (u.city) meta += '<span>' + esc(u.city) + '</span>';
+      if (km !== null) meta += '<span class="km' + (km < 10 ? ' proche' : '') + '">' + esc(distanceTexte(km)) + '</span>';
+      return '<div class="user' + (estMoi ? ' moi' : '') + (ignores.has(u.uid) ? ' ign' : '') +
+        '" data-uid="' + esc(u.uid) + '">' +
         '<span class="avatar" style="background:' + esc(u.color) + '">' + esc(u.pseudo[0]) + '</span>' +
-        '<span class="nm">' + esc(u.pseudo) + (det ? '<div class="meta">' + esc(det) + '</div>' : '') + '</span>' +
+        '<span class="nm">' + esc(u.pseudo) + (meta ? '<div class="meta">' + meta + '</div>' : '') + '</span>' +
+        (estMoi ? '<span class="tagv">vous</span>' : '') +
+        (u.voice ? '<span class="tagmic" title="au micro">🎙️</span>' : '') +
         (u.role !== 'user' ? '<span class="tagm">modo</span>' : '') + '</div>';
     }).join('');
+
     [].forEach.call($('userList').querySelectorAll('.user'), function (el) {
       el.onclick = function () { ouvrirFiche(el.getAttribute('data-uid')); };
     });
+  }
+
+  /* --------------------- salons audio et radio ----------------------- */
+  function rendreBarreSalon() {
+    var bar = $('audioBar');
+    var kind = (salonActuel && salonActuel.kind) || 'text';
+
+    /* En message privé on masque la barre : la radio du salon n'a rien à
+       faire au-dessus d'une conversation à deux. */
+    if (vue.type !== 'room' || kind === 'text') {
+      bar.hidden = true;
+      $('voix').hidden = true;
+      if (voix.actif) voix.quitter();
+      var vieux = bar.querySelector('audio');
+      if (vieux) vieux.pause();
+      bar.innerHTML = '';
+      return;
+    }
+
+    if (kind === 'radio') {
+      bar.hidden = false;
+      $('voix').hidden = true;
+      var flux = salonActuel.stream_url || '';
+      bar.innerHTML = flux
+        ? '<span class="t">📻 ' + esc(salonActuel.name) + '</span>' +
+          '<audio controls preload="none" src="' + esc(flux) + '"></audio>' +
+          '<span class="sub">La radio se lance en cliquant sur ▶. Le tchat continue pendant l\'écoute.</span>'
+        : '<span class="t">📻 ' + esc(salonActuel.name) + '</span>' +
+          '<span class="sub">Aucun flux radio n\'est encore réglé pour ce salon (à saisir dans l\'administration).</span>';
+      return;
+    }
+
+    /* kind === 'audio' */
+    bar.hidden = false;
+    $('voix').hidden = false;
+    bar.innerHTML =
+      '<span class="t">🎙️ ' + esc(salonActuel.name) + '</span>' +
+      (voix.actif
+        ? '<button class="btn danger" id="micOff" type="button">Quitter le micro</button>' +
+          '<button class="btn light" id="micMute" type="button">' + (voix.enMuet ? '🔇 Réactiver' : '🔊 Couper mon micro') + '</button>'
+        : '<button class="btn" id="micOn" type="button">🎙️ Prendre le micro</button>') +
+      '<span class="sub">Le son passe directement entre les navigateurs, il ne transite pas par le serveur.</span>';
+
+    var on = $('micOn'), off = $('micOff'), mute = $('micMute');
+    if (on) on.onclick = function () {
+      on.disabled = true;
+      voix.rejoindre().then(function () { rendreBarreSalon(); });
+    };
+    if (off) off.onclick = function () { voix.quitter(); rendreBarreSalon(); };
+    if (mute) mute.onclick = function () {
+      voix.enMuet = !voix.enMuet;
+      voix.muet(voix.enMuet);
+      rendreBarreSalon();
+    };
+    rendreVoix();
+  }
+
+  function rendreVoix() {
+    if ($('voix').hidden) return;
+    var auMicro = membres.filter(function (u) { return u.voice; });
+    $('voix').innerHTML = auMicro.length
+      ? auMicro.map(function (u) {
+          return '<span class="p"><span class="avatar" style="background:' + esc(u.color) + '">' +
+            esc(u.pseudo[0]) + '</span>' + esc(u.pseudo) + '</span>';
+        }).join('')
+      : '<span class="sub muted">Personne au micro pour le moment.</span>';
   }
 
   /* ------------------------------ fiche ------------------------------ */
@@ -350,11 +468,17 @@
     }
     if (!u) return;
     fiche = u;
-    var sexe = { h: 'Homme', f: 'Femme', a: '' };
+    var p = profils[u.gender] || null;
+    var km = distanceKm(moi, u);
     $('cardAvatar').textContent = u.pseudo[0];
     $('cardAvatar').style.background = u.color || '#64748b';
     $('cardPseudo').textContent = u.pseudo;
-    $('cardMeta').textContent = [u.age ? u.age + ' ans' : '', sexe[u.gender] || '', u.region || ''].filter(Boolean).join(' · ');
+    $('cardMeta').textContent = [
+      u.age ? u.age + ' ans' : '',
+      p && p.court ? p.court : '',
+      u.city || '',
+      km !== null ? 'à ' + distanceTexte(km) : '',
+    ].filter(Boolean).join(' · ');
     $('cardIgnore').textContent = ignores.has(uid) ? '👁️ Ne plus ignorer' : '🙈 Ignorer';
     $('card').hidden = false;
   }

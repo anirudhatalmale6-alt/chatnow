@@ -34,15 +34,17 @@ def check(label, cond):
         fails.append(label)
         print("  ÉCHEC %s" % label)
 
-def entrer(ctx, pseudo, age, gender="a", region=""):
+def entrer(ctx, pseudo, age, gender="a", cp=""):
     p = ctx.new_page()
     p.set_viewport_size({"width": 1280, "height": 760})
     p.goto(BASE, wait_until="domcontentloaded")
+    p.wait_for_function("() => document.querySelectorAll('#gender option').length > 2", timeout=10000)
     p.fill("#pseudo", pseudo)
     p.fill("#age", str(age))
     p.select_option("#gender", gender)
-    if region:
-        p.fill("#region", region)
+    if cp:
+        p.fill("#postal", cp)
+        p.wait_for_function("() => !document.getElementById('city').disabled", timeout=10000)
     p.click("#entry button[type=submit]")
     p.wait_for_url("**/chat", timeout=15000)
     p.wait_for_selector(".room.on", timeout=15000)
@@ -103,8 +105,8 @@ with sync_playwright() as pw:
     bad.close()
 
     # ---------- deux visiteurs ----------
-    A = entrer(ca, "Camille", 29, "f", "Occitanie")
-    B = entrer(cb, "Julien", 34, "h", "Bretagne")
+    A = entrer(ca, "Camille", 29, "f", "31000")
+    B = entrer(cb, "Julien", 34, "h", "35000")
 
     A.wait_for_timeout(900)
     check("A voit B dans les connectés", "Julien" in A.inner_text("#userList"))
@@ -195,7 +197,7 @@ with sync_playwright() as pw:
           "tu me vois encore" not in A.inner_text("#messages"))
 
     # ---------- salon réservé aux majeurs ----------
-    C = entrer(b.new_context(locale="fr-FR"), "Theo", 16)
+    C = entrer(b.new_context(locale="fr-FR"), "Theo", 16, "h", "44000")
     C.click("#roomList .room:has-text('Rencontres')")
     check("salon 18+ refusé à un mineur", attendre_notice(C, "18 ans et plus"))
     C.click("#roomList .room:has-text('Jeux vidéo')")
@@ -232,12 +234,13 @@ with sync_playwright() as pw:
         check("pas de débordement horizontal à %dpx" % w, not deborde)
         p.close()
 
-    # ---------- thème sombre ----------
-    A.click("#theme")
-    A.wait_for_timeout(400)
-    check("thème sombre appliqué", A.evaluate("() => document.documentElement.getAttribute('data-theme')") == "dark")
+    # ---------- thème ----------
+    A.click("#theme"); A.wait_for_timeout(350)
+    A.click(".theme-pop button[data-t='sombre']"); A.wait_for_timeout(350)
+    check("thème sombre appliqué", A.evaluate("() => document.documentElement.getAttribute('data-theme')") == "sombre")
     A.screenshot(path=f"{SHOTS}/08-sombre.png")
-    A.click("#theme")
+    A.click("#theme"); A.wait_for_timeout(300)
+    A.click(".theme-pop button[data-t='clair']"); A.wait_for_timeout(300)
 
     # ---------- administration ----------
     ADM = ca.new_page()

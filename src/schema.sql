@@ -112,3 +112,21 @@ CREATE TABLE IF NOT EXISTS moderation_log (
   KEY idx_modlog_created (created_at),
   KEY idx_modlog_rule (rule)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Villes et codes postaux (source GeoNames, CC BY 4.0). Remplie par
+-- `node scripts/import-cities.js` ; le tchat fonctionne sans, la ville
+-- devient simplement un champ libre sans distance.
+CREATE TABLE IF NOT EXISTS cities (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  country       CHAR(2)      NOT NULL,
+  postal        VARCHAR(12)  NOT NULL,
+  name          VARCHAR(120) NOT NULL,
+  name_norm     VARCHAR(120) NOT NULL,
+  dept          VARCHAR(80)  NULL,
+  region        VARCHAR(90)  NULL,
+  lat           DECIMAL(9,6) NOT NULL,
+  lng           DECIMAL(9,6) NOT NULL,
+  UNIQUE KEY uq_city (country, postal, name),
+  KEY idx_city_postal (postal),
+  KEY idx_city_norm (name_norm)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

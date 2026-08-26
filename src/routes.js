@@ -6,7 +6,8 @@ const db = require('./db');
 const mod = require('./moderation');
 const presence = require('./presence');
 const session = require('./session');
-const { couleurPour } = require('./sockets');
+const geo = require('./geo');
+const profils = require('./profils');
 
 const router = express.Router();
 
@@ -28,8 +29,11 @@ router.post('/api/join', async (req, res) => {
   try {
     const pseudo = String(req.body.pseudo || '').replace(/\s+/g, ' ').trim();
     const age = parseInt(req.body.age, 10);
-    const gender = ['h', 'f', 'a'].includes(req.body.gender) ? req.body.gender : 'a';
+    const gender = profils.valide(req.body.gender) ? String(req.body.gender) : 'a';
     const region = String(req.body.region || '').trim().slice(0, 60) || null;
+    const country = /^[A-Za-z]{2}$/.test(req.body.country || '') ? String(req.body.country).toUpperCase() : 'FR';
+    const postal = geo.normalisePostal(req.body.postal).slice(0, 12);
+    const cityNom = String(req.body.city || '').trim().slice(0, 120);
 
     if (!RE_PSEUDO.test(pseudo)) {
       return res.status(400).json({ ok: false, message: 'Pseudo invalide : 3 à 24 caractères, lettres et chiffres.' });
@@ -53,20 +57,40 @@ router.post('/api/join', async (req, res) => {
       return res.status(409).json({ ok: false, message: 'Ce pseudo est déjà utilisé en ce moment. Choisissez-en un autre.' });
     }
 
+    /* Le code postal est reverifie ICI, contre la base des communes. Le
+       navigateur a beau proposer une liste, rien n'empeche d'envoyer autre
+       chose : sans ce controle, on stockerait des coordonnees inventees et
+       toutes les distances affichees seraient fausses. */
+    let lieu = null;
+    if (postal) {
+      const communes = await geo.parCodePostal(postal, country);
+      if (!communes.length) {
+        return res.status(400).json({ ok: false, message: 'Code postal inconnu. Vérifiez-le, ou laissez le champ vide.' });
+      }
+      lieu = (cityNom && communes.find((c) => c.name === cityNom)) || communes[0];
+    }
+
     /* On réutilise la session existante si le visiteur revient : il garde son
        historique privé et sa couleur, sans avoir à créer une seconde ligne. */
     let uid = session.readSession(req);
     if (uid && await db.one('SELECT id FROM visitors WHERE uid = ?', [uid])) {
       await db.run(
-        'UPDATE visitors SET pseudo=?, age=?, gender=?, region=?, ip_hash=?, last_seen_at=NOW() WHERE uid=?',
-        [pseudo, age, gender, region, ipHash, uid]
+        `UPDATE visitors SET pseudo=?, age=?, gender=?, region=?, country=?, postal=?, city=?,
+                             lat=?, lng=?, avatar_color=?, ip_hash=?, last_seen_at=NOW()
+          WHERE uid=?`,
+        [pseudo, age, gender, region, lieu ? lieu.country : null, lieu ? lieu.postal : null,
+          lieu ? lieu.name : null, lieu ? lieu.lat : null, lieu ? lieu.lng : null,
+          profils.couleur(gender), ipHash, uid]
       );
     } else {
       uid = session.newUid();
       await db.run(
-        `INSERT INTO visitors (uid, pseudo, age, gender, region, avatar_color, ip_hash, last_seen_at)
-         VALUES (?,?,?,?,?,?,?,NOW())`,
-        [uid, pseudo, age, gender, region, couleurPour(uid), ipHash]
+        `INSERT INTO visitors (uid, pseudo, age, gender, region, country, postal, city, lat, lng,
+                               avatar_color, ip_hash, last_seen_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())`,
+        [uid, pseudo, age, gender, region, lieu ? lieu.country : null, lieu ? lieu.postal : null,
+          lieu ? lieu.name : null, lieu ? lieu.lat : null, lieu ? lieu.lng : null,
+          profils.couleur(gender), ipHash]
       );
     }
     session.setSession(res, uid, estSecurise(req));
@@ -82,7 +106,7 @@ router.post('/api/quit', (req, res) => {
 });
 
 router.get('/api/rooms', async (req, res) => {
-  const rooms = await db.query('SELECT slug, name, description, emoji, min_age FROM rooms WHERE is_active = 1 ORDER BY position, id');
+  const rooms = await db.query('SELECT slug, name, description, emoji, kind, min_age FROM rooms WHERE is_active = 1 ORDER BY position, id');
   const counts = presence.counts();
   res.json({
     ok: true,
@@ -91,10 +115,36 @@ router.get('/api/rooms', async (req, res) => {
   });
 });
 
+/* Recherche de commune : par code postal (?cp=31000) ou par nom (?q=toulou).
+   Aucune API extérieure n'est appelée — tout vient de la table `cities`. */
+router.get('/api/villes', async (req, res) => {
+  try {
+    const cp = String(req.query.cp || '').trim();
+    const q = String(req.query.q || '').trim();
+    const pays = /^[A-Za-z]{2}$/.test(req.query.pays || '') ? String(req.query.pays).toUpperCase() : null;
+    const villes = cp ? await geo.parCodePostal(cp, pays) : (q ? await geo.parNom(q, 12) : []);
+    res.json({
+      ok: true,
+      villes: villes.map((v) => ({ pays: v.country, cp: v.postal, nom: v.name, dept: v.dept, region: v.region })),
+    });
+  } catch (e) {
+    res.json({ ok: false, villes: [] });
+  }
+});
+
+router.get('/api/webrtc', (req, res) => {
+  res.json({ ok: true, iceServers: config.iceServers, maxSpeakers: config.voiceMaxSpeakers });
+});
+
+router.get('/api/profils', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=600');
+  res.json({ ok: true, profils: profils.PROFILS });
+});
+
 router.get('/api/me', async (req, res) => {
   const uid = session.readSession(req);
   if (!uid) return res.json({ ok: false });
-  const v = await db.one('SELECT uid, pseudo, age, gender, region, avatar_color, role FROM visitors WHERE uid = ?', [uid]);
+  const v = await db.one('SELECT uid, pseudo, age, gender, region, country, postal, city, avatar_color, role FROM visitors WHERE uid = ?', [uid]);
   res.json(v ? { ok: true, me: v } : { ok: false });
 });
 
@@ -189,10 +239,15 @@ router.get('/admin/rooms', async (req, res) => {
   res.send(page('Salons', `
 <h1>Salons</h1>
 <div class="card"><table>
-<tr><th>Nom</th><th>Adresse</th><th>Âge mini</th><th>Ordre</th><th>Connectés</th><th>État</th><th></th></tr>
+<tr><th>Nom</th><th>Adresse</th><th>Type</th><th>Âge mini</th><th>Ordre</th><th>Connectés</th><th>État</th><th></th></tr>
 ${rooms.map((r) => `<tr><form method="post" action="/admin/rooms/${r.id}">
 <td><input name="name" value="${e(r.name)}"><br><input name="description" value="${e(r.description || '')}" class="small"></td>
 <td><code>/${e(r.slug)}</code></td>
+<td><select name="kind">
+<option value="text"${r.kind === 'text' ? ' selected' : ''}>Texte</option>
+<option value="audio"${r.kind === 'audio' ? ' selected' : ''}>Micro</option>
+<option value="radio"${r.kind === 'radio' ? ' selected' : ''}>Radio</option>
+</select>${r.kind === 'radio' ? `<br><input name="stream_url" value="${e(r.stream_url || '')}" class="small" placeholder="adresse du flux radio">` : ''}</td>
 <td><input name="min_age" type="number" min="0" max="99" value="${r.min_age}" class="mini"></td>
 <td><input name="position" type="number" value="${r.position}" class="mini"></td>
 <td>${counts[r.slug] || 0}</td>
@@ -203,8 +258,17 @@ ${rooms.map((r) => `<tr><form method="post" action="/admin/rooms/${r.id}">
 <label>Nom<input name="name" required></label>
 <label>Description<input name="description"></label>
 <label>Emoji<input name="emoji" maxlength="4" value="💬"></label>
+<label>Type de salon<select name="kind">
+<option value="text">Texte — discussion écrite</option>
+<option value="audio">Micro — on se parle à la voix</option>
+<option value="radio">Radio — tout le monde écoute le même flux</option>
+</select></label>
+<label>Adresse du flux radio <span class="opt">(salons radio uniquement)</span><input name="stream_url" placeholder="https://…"></label>
 <label>Âge minimum<input name="min_age" type="number" value="0" min="0" max="99"></label>
-<button class="btn">Créer</button></form>`));
+<button class="btn">Créer</button></form>
+<p class="muted">Un salon micro fait circuler le son directement entre les navigateurs : il ne consomme
+presque rien sur le serveur, mais le nombre de personnes au micro en même temps est limité
+(réglage VOICE_MAX_SPEAKERS). Le micro exige une adresse en https.</p>`));
 });
 
 router.post('/admin/rooms', async (req, res) => {
@@ -213,21 +277,35 @@ router.post('/admin/rooms', async (req, res) => {
     const slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'salon';
     const [{ n }] = await db.query('SELECT COALESCE(MAX(position),0)+10 AS n FROM rooms');
+    const kind = ['text', 'audio', 'radio'].includes(req.body.kind) ? req.body.kind : 'text';
     await db.run(
-      'INSERT IGNORE INTO rooms (slug,name,description,emoji,min_age,position) VALUES (?,?,?,?,?,?)',
+      'INSERT IGNORE INTO rooms (slug,name,description,emoji,kind,stream_url,min_age,position) VALUES (?,?,?,?,?,?,?,?)',
       [slug, name, String(req.body.description || '').slice(0, 190) || null,
-        String(req.body.emoji || '💬').slice(0, 12), parseInt(req.body.min_age, 10) || 0, n]
+        String(req.body.emoji || '💬').slice(0, 12), kind,
+        String(req.body.stream_url || '').trim().slice(0, 255) || null,
+        parseInt(req.body.min_age, 10) || 0, n]
     );
   }
   res.redirect('/admin/rooms');
 });
 
 router.post('/admin/rooms/:id', async (req, res) => {
+  const kind = ['text', 'audio', 'radio'].includes(req.body.kind) ? req.body.kind : 'text';
+  /* Le champ « flux » n'est affiché que sur les salons déjà en radio : sans ce
+     COALESCE, éditer une autre ligne effacerait l'adresse enregistrée. */
+  const flux = req.body.stream_url === undefined
+    ? null : (String(req.body.stream_url).trim().slice(0, 255) || null);
   await db.run(
-    'UPDATE rooms SET name=?, description=?, min_age=?, position=?, is_active=? WHERE id=?',
-    [String(req.body.name || '').slice(0, 80), String(req.body.description || '').slice(0, 190) || null,
-      parseInt(req.body.min_age, 10) || 0, parseInt(req.body.position, 10) || 0,
-      req.body.is_active === '1' ? 1 : 0, parseInt(req.params.id, 10)]
+    `UPDATE rooms SET name=?, description=?, kind=?, min_age=?, position=?, is_active=?,
+            stream_url = ${req.body.stream_url === undefined ? 'stream_url' : '?'}
+      WHERE id=?`,
+    req.body.stream_url === undefined
+      ? [String(req.body.name || '').slice(0, 80), String(req.body.description || '').slice(0, 190) || null,
+        kind, parseInt(req.body.min_age, 10) || 0, parseInt(req.body.position, 10) || 0,
+        req.body.is_active === '1' ? 1 : 0, parseInt(req.params.id, 10)]
+      : [String(req.body.name || '').slice(0, 80), String(req.body.description || '').slice(0, 190) || null,
+        kind, parseInt(req.body.min_age, 10) || 0, parseInt(req.body.position, 10) || 0,
+        req.body.is_active === '1' ? 1 : 0, flux, parseInt(req.params.id, 10)]
   );
   res.redirect('/admin/rooms');
 });

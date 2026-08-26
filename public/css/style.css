@@ -1,20 +1,52 @@
 /* ------------------------------------------------------------------ *
  * ChatNow — feuille de style unique (accueil + tchat)                  *
- * Thème clair par défaut, thème sombre via [data-theme="dark"].        *
+ * Six palettes, appliquées par l'attribut data-theme sur <html>.       *
  * ------------------------------------------------------------------ */
 
-:root{
+/* --- Palettes. Six thèmes, choisis dans le menu de la pastille de couleur.
+       Chaque thème redéfinit les MÊMES variables : aucune règle plus bas ne
+       connaît les couleurs, elles ne connaissent que les variables. Ajouter un
+       thème = ajouter un bloc ici, rien d'autre. --- */
+:root, :root[data-theme="clair"]{
   --bg:#f4f6fb; --panel:#ffffff; --panel-2:#f8fafc; --ink:#111827; --muted:#6b7280;
   --line:#e5e7eb; --brand:#2563eb; --brand-ink:#ffffff; --brand-soft:#eff6ff;
   --ok:#16a34a; --danger:#dc2626; --warn:#d97706;
   --radius:14px; --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.06);
-  --bubble:#f1f5f9; --bubble-me:#dbeafe;
+  --bubble:#f1f5f9; --bubble-me:#dbeafe; --hero:linear-gradient(135deg,#2563eb,#7c3aed);
 }
-[data-theme="dark"]{
+:root[data-theme="sombre"]{
   --bg:#0b1220; --panel:#111a2b; --panel-2:#0f1726; --ink:#e6edf7; --muted:#93a3b8;
   --line:#1f2b3d; --brand:#3b82f6; --brand-ink:#ffffff; --brand-soft:#16243c;
-  --bubble:#182338; --bubble-me:#1e3a5f;
+  --bubble:#182338; --bubble-me:#1e3a5f; --hero:linear-gradient(135deg,#1e3a8a,#4c1d95);
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+:root[data-theme="violet"]{
+  --bg:#120c1f; --panel:#1b1230; --panel-2:#160e28; --ink:#f2e9ff; --muted:#a99bc4;
+  --line:#2e2148; --brand:#a855f7; --brand-ink:#ffffff; --brand-soft:#2b1a45;
+  --ok:#22c55e; --danger:#f43f5e; --warn:#fbbf24;
+  --bubble:#241738; --bubble-me:#42207a; --hero:linear-gradient(135deg,#7c3aed,#db2777);
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px rgba(124,58,237,.25);
+}
+:root[data-theme="ocean"]{
+  --bg:#04141f; --panel:#0a2030; --panel-2:#071a28; --ink:#e2f4ff; --muted:#8fb3c7;
+  --line:#123449; --brand:#0ea5e9; --brand-ink:#04141f; --brand-soft:#0d2d40;
+  --ok:#2dd4bf; --danger:#fb7185; --warn:#fbbf24;
+  --bubble:#0f2c3f; --bubble-me:#0b4a66; --hero:linear-gradient(135deg,#0ea5e9,#14b8a6);
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px rgba(14,165,233,.2);
+}
+:root[data-theme="rose"]{
+  --bg:#fff5f9; --panel:#ffffff; --panel-2:#fff0f6; --ink:#3b0724; --muted:#9d5b7c;
+  --line:#fbcfe8; --brand:#ec4899; --brand-ink:#ffffff; --brand-soft:#fce7f3;
+  --ok:#16a34a; --danger:#e11d48; --warn:#d97706;
+  --bubble:#fdeef5; --bubble-me:#fbcfe8; --hero:linear-gradient(135deg,#ec4899,#f97316);
+  --shadow:0 1px 2px rgba(157,23,77,.08),0 8px 24px rgba(157,23,77,.10);
+}
+:root[data-theme="neon"]{
+  --bg:#05060a; --panel:#0c0f18; --panel-2:#090c14; --ink:#e8fbff; --muted:#7d93a8;
+  --line:#1a2233; --brand:#22d3ee; --brand-ink:#05060a; --brand-soft:#0d2630;
+  --ok:#4ade80; --danger:#f43f5e; --warn:#facc15;
+  --bubble:#121826; --bubble-me:#0b3b47; --hero:linear-gradient(135deg,#22d3ee,#a3e635);
+  --shadow:0 1px 2px rgba(0,0,0,.6),0 0 28px rgba(34,211,238,.18);
 }
 
 *{box-sizing:border-box}
@@ -87,9 +119,12 @@ textarea{resize:vertical}
 .entry-grid{display:grid;grid-template-columns:1fr 90px;gap:0 12px}
 .entry-grid .f-pseudo{grid-column:1}
 .entry-grid .f-age{grid-column:2}
-.entry-grid .f-gender,.entry-grid .f-region{grid-column:1/-1}
-.entry-err{background:#fee2e2;color:#991b1b;border-radius:9px;padding:9px 11px;margin:0 0 12px;font-size:14px}
-[data-theme="dark"] .entry-err{background:#3b1414;color:#fca5a5}
+.entry-grid .f-gender{grid-column:1/-1}
+/* Teinte dérivée de --danger plutôt qu'une couleur écrite en dur : le message
+   d'erreur reste lisible sur les six thèmes sans une règle par thème. */
+.entry-err{background:color-mix(in srgb, var(--danger) 14%, var(--panel));
+  color:var(--danger);border:1px solid color-mix(in srgb, var(--danger) 35%, var(--panel));
+  border-radius:9px;padding:9px 11px;margin:0 0 12px;font-size:14px}
 
 .rooms-preview{margin:34px 0}
 .room-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
@@ -132,8 +167,7 @@ textarea{resize:vertical}
 .room .em{font-size:17px;line-height:1}
 .room .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14.5px}
 .room .n{font-size:11.5px;color:var(--muted);background:var(--panel-2);border-radius:999px;padding:2px 7px}
-.room.on .n{background:#fff;color:var(--brand)}
-[data-theme="dark"] .room.on .n{background:#0b1220}
+.room.on .n{background:var(--panel);color:var(--brand)}
 
 .bar{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--panel);
   border-bottom:1px solid var(--line);min-height:54px}
@@ -176,8 +210,8 @@ textarea{resize:vertical}
 .emoji-pop button{background:none;border:0;font-size:19px;cursor:pointer;padding:4px;border-radius:7px}
 .emoji-pop button:hover{background:var(--panel-2)}
 
-.notice{margin:0;padding:9px 14px;background:#fef3c7;color:#92400e;font-size:13.5px}
-[data-theme="dark"] .notice{background:#3a2c07;color:#fcd34d}
+.notice{margin:0;padding:9px 14px;font-size:13.5px;
+  background:color-mix(in srgb, var(--warn) 16%, var(--panel)); color:var(--warn)}
 
 .user{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:10px;cursor:pointer}
 .user:hover{background:var(--panel-2)}
@@ -185,6 +219,9 @@ textarea{resize:vertical}
 .user .meta{font-size:11.5px;color:var(--muted)}
 .user.ign{opacity:.45}
 .user .tagm{font-size:10px;background:var(--ok);color:#fff;border-radius:4px;padding:1px 4px;font-weight:700}
+.user .tagv{font-size:10px;background:var(--brand);color:var(--brand-ink);border-radius:4px;padding:1px 5px;font-weight:700;text-transform:uppercase}
+.user .tagmic{font-size:13px}
+.user.moi{background:var(--brand-soft);cursor:default}
 .pill{background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:1px 8px;font-size:12px;color:var(--muted)}
 .col-foot.me{gap:9px;justify-content:flex-start}
 .col-foot.me .nm{font-weight:600;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -240,3 +277,38 @@ textarea{resize:vertical}
 .veil{position:fixed;inset:0;background:rgba(8,12,20,.45);z-index:45;display:none}
 .veil.on{display:block}
 @media (min-width:781px){.veil{display:none!important}}
+
+
+/* ------------------------- thèmes : le sélecteur ------------------- */
+.theme-dot{display:block;width:17px;height:17px;border-radius:50%;border:2px solid var(--line)}
+.theme-pop{position:fixed;z-index:80;width:168px;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow);padding:6px;display:grid;gap:2px}
+.theme-pop button{display:flex;align-items:center;gap:9px;background:none;border:0;color:var(--ink);
+  font:inherit;font-size:14px;text-align:left;padding:8px 9px;border-radius:8px;cursor:pointer;width:100%}
+.theme-pop button:hover{background:var(--panel-2)}
+.theme-pop button.on{background:var(--brand-soft);color:var(--brand);font-weight:700}
+.theme-pop i{width:14px;height:14px;border-radius:50%;border:1px solid rgba(128,128,128,.35);flex:0 0 14px}
+
+/* ------------------------- profil et distance ---------------------- */
+.user .meta{font-size:11.5px;color:var(--muted);display:flex;gap:5px;flex-wrap:wrap;align-items:baseline}
+.user .prof{font-weight:700}
+.user .km{color:var(--muted)}
+.user .km.proche{color:var(--ok);font-weight:700}
+.entry-grid .f-pays{grid-column:1}
+.entry-grid .f-cp{grid-column:2}
+.entry-grid .f-gender,.entry-grid .f-ville{grid-column:1/-1}
+.hint{display:block;color:var(--muted);font-size:11.5px;font-weight:400;margin-top:5px}
+.hint.err{color:var(--danger)}
+
+/* --------------------------- salon audio --------------------------- */
+.audio-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 14px;
+  background:var(--brand-soft);border-bottom:1px solid var(--line)}
+.audio-bar .t{font-weight:700;font-size:14px;color:var(--brand);min-width:0}
+.audio-bar .sub{color:var(--muted);font-size:12.5px}
+.audio-bar audio{height:34px;max-width:100%}
+.audio-bar .btn{padding:8px 13px;font-size:14px}
+.voix{display:flex;gap:8px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.voix .p{display:inline-flex;align-items:center;gap:7px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:999px;padding:4px 11px 4px 4px;font-size:13px}
+.voix .p.parle{border-color:var(--ok);box-shadow:0 0 0 2px rgba(22,163,74,.18)}
+.voix .p .avatar{width:24px;height:24px;flex-basis:24px;font-size:11px}

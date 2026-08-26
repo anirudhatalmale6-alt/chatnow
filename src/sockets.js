@@ -1,5 +1,5 @@
 'use strict';
-const crypto = require('crypto');
+
 const config = require('./config');
 const db = require('./db');
 const mod = require('./moderation');
@@ -11,13 +11,20 @@ const session = require('./session');
    force donc un entier, borné, que l'on écrit directement dans la requête. */
 const lim = (n, max = 200) => Math.max(1, Math.min(max, parseInt(n, 10) || 1));
 
-const COULEURS = ['#2563eb', '#db2777', '#16a34a', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626', '#4f46e5', '#059669'];
-const couleurPour = (uid) =>
-  COULEURS[parseInt(crypto.createHash('md5').update(uid).digest('hex').slice(0, 8), 16) % COULEURS.length];
+/* Les coordonnées envoyées au navigateur sont arrondies à deux décimales, soit
+   environ un kilomètre. C'est assez pour calculer une distance chez le
+   visiteur — donc sans faire travailler le serveur pour chaque paire — et trop
+   grossier pour situer qui que ce soit. Le nom de la commune, lui, est déjà
+   affiché : on ne divulgue rien de plus.
+   La position exacte de la personne n'est de toute façon jamais connue : on ne
+   stocke que le centre de sa commune. */
+const arrondi = (v) => (v === null || v === undefined ? null : Math.round(Number(v) * 100) / 100);
 
 const publicUser = (s) => ({
   uid: s.uid, pseudo: s.pseudo, age: s.age, gender: s.gender,
-  region: s.region, color: s.color, role: s.role,
+  region: s.region, city: s.city, country: s.country,
+  lat: arrondi(s.lat), lng: arrondi(s.lng),
+  color: s.color, role: s.role, voice: !!s.voice,
 });
 
 function ipOf(socket) {
@@ -31,7 +38,10 @@ async function roomBySlug(slug) {
 }
 
 async function listRooms() {
-  return db.query('SELECT slug, name, description, emoji, min_age FROM rooms WHERE is_active = 1 ORDER BY position, id');
+  return db.query(
+    `SELECT slug, name, description, emoji, kind, stream_url, min_age
+       FROM rooms WHERE is_active = 1 ORDER BY position, id`
+  );
 }
 
 function attach(io) {
@@ -51,7 +61,9 @@ function attach(io) {
 
       socket.data.session = {
         uid: v.uid, visitorId: v.id, pseudo: v.pseudo, age: v.age, gender: v.gender,
-        region: v.region, color: v.avatar_color, role: v.role, ipHash,
+        region: v.region, country: v.country, postal: v.postal, city: v.city,
+        lat: v.lat, lng: v.lng,
+        color: v.avatar_color, role: v.role, ipHash,
         room: null, ignored: new Set(),
       };
       next();
@@ -84,6 +96,12 @@ function attach(io) {
 
         const ancien = s.room;
         if (ancien === room.slug) return ack && ack({ ok: true, already: true });
+        if (ancien && s.voice) {
+          /* Changer de salon en gardant le micro ouvert laisserait la voix
+             dans l'ancien salon, sans plus personne pour la couper. */
+          s.voice = false;
+          socket.to('room:' + ancien).emit('voice:peer', { uid: s.uid, on: false });
+        }
         if (ancien) {
           socket.leave('room:' + ancien);
           socket.to('room:' + ancien).emit('system', { text: `${s.pseudo} a quitté le salon.`, kind: 'leave' });
@@ -97,7 +115,10 @@ function attach(io) {
           [room.id]
         );
         socket.emit('room:joined', {
-          room: { slug: room.slug, name: room.name, description: room.description, emoji: room.emoji },
+          room: {
+            slug: room.slug, name: room.name, description: room.description,
+            emoji: room.emoji, kind: room.kind || 'text', stream_url: room.stream_url || null,
+          },
           history: rows.reverse(),
           users: presence.inRoom(room.slug).map(publicUser),
         });
@@ -277,8 +298,60 @@ function attach(io) {
       }
     });
 
+    /* --------------------------- micro ---------------------------- *
+     * Le son ne passe PAS par le serveur : chaque navigateur se connecte
+     * directement aux autres (WebRTC). Le serveur ne fait que transmettre
+     * les messages de mise en relation. C'est ce qui permet de tenir un
+     * salon audio sur un petit VPS — mais c'est aussi pourquoi le nombre de
+     * participants au micro doit rester limité : chacun envoie son flux à
+     * tous les autres.
+     * ------------------------------------------------------------------ */
+    socket.on('voice:join', async (payload, ack) => {
+      try {
+        if (!s.room) return ack && ack({ ok: false, message: "Rejoignez d'abord un salon." });
+        const room = await roomBySlug(s.room);
+        if (!room || room.kind !== 'audio') {
+          return ack && ack({ ok: false, message: "Ce salon n'a pas de micro." });
+        }
+        const deja = presence.inRoom(s.room).filter((u) => u.voice && u.uid !== s.uid);
+        if (deja.length >= config.voiceMaxSpeakers) {
+          return ack && ack({ ok: false, message: `Le micro est complet (${config.voiceMaxSpeakers} personnes maximum).` });
+        }
+        s.voice = true;
+        socket.to('room:' + s.room).emit('voice:peer', { uid: s.uid, pseudo: s.pseudo, color: s.color, on: true });
+        io.to('room:' + s.room).emit('users', presence.inRoom(s.room).map(publicUser));
+        ack && ack({ ok: true, pairs: deja.map((u) => ({ uid: u.uid, pseudo: u.pseudo, color: u.color })) });
+      } catch (e) {
+        ack && ack({ ok: false, message: 'Erreur serveur.' });
+      }
+    });
+
+    const quitteMicro = () => {
+      if (!s.voice) return;
+      s.voice = false;
+      if (s.room) {
+        socket.to('room:' + s.room).emit('voice:peer', { uid: s.uid, on: false });
+        io.to('room:' + s.room).emit('users', presence.inRoom(s.room).map(publicUser));
+      }
+    };
+    socket.on('voice:leave', () => quitteMicro());
+
+    /* Relais de mise en relation. On ne transmet qu'aux personnes présentes
+       dans le MÊME salon : sans ce contrôle, n'importe qui pourrait ouvrir
+       une connexion audio vers n'importe quel visiteur du site. */
+    socket.on('voice:signal', (payload) => {
+      const to = String((payload && payload.to) || '');
+      if (!to || !s.room) return;
+      const cible = presence.inRoom(s.room).find((u) => u.uid === to);
+      if (!cible) return;
+      presence.socketsOf(to).forEach((id) => {
+        io.to(id).emit('voice:signal', { from: s.uid, pseudo: s.pseudo, data: payload.data });
+      });
+    });
+
     /* ------------------------ déconnexion ------------------------- */
     socket.on('disconnect', () => {
+      quitteMicro();
       const parti = presence.remove(socket.id);
       if (!parti) return;
       /* Un seul onglet fermé sur deux ne fait pas quitter le salon. */
@@ -293,4 +366,4 @@ function attach(io) {
   });
 }
 
-module.exports = { attach, couleurPour, publicUser };
+module.exports = { attach, publicUser };

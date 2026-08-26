@@ -10,16 +10,18 @@ SHOTS = "/var/lib/freelancer/projects/40562019/chatnow/test/shots"
 os.makedirs(SHOTS, exist_ok=True)
 
 GENS = [
-    ("Camille", 29, "f", "Occitanie"),
-    ("Julien", 34, "h", "Bretagne"),
-    ("Sofia", 26, "f", "Île-de-France"),
-    ("Marc", 41, "h", "Grand Est"),
+    ("Camille", 29, "f",      "31000"),   # Toulouse
+    ("Julien",  34, "h",      "31200"),   # Toulouse aussi
+    ("Sofia",   26, "f",      "75011"),   # Paris
+    ("Marc",    41, "couple", "13008"),   # Marseille
+    ("Alex",    27, "gay",    "31700"),   # Blagnac, tout près de Toulouse
 ]
 
 CONVERSATION = [
     ("Camille", "Bonjour tout le monde ! Première fois ici, ça a l'air sympa 😀"),
     ("Julien", "Salut Camille, bienvenue ! On est plutôt tranquilles dans ce salon."),
     ("Sofia", "Coucou 👋 quelqu'un a vu le match hier soir ?"),
+    ("Alex", "Bonsoir tout le monde ! Je suis juste à côté de Toulouse"),
     ("Marc", "Oui ! La deuxième mi-temps était incroyable"),
     ("Julien", "J'ai raté ça, je bossais. Ça a fini comment ?"),
     ("Marc", "3-2 dans les arrêts de jeu, du grand n'importe quoi 😅"),
@@ -30,12 +32,15 @@ CONVERSATION = [
     ("Sofia", "Paris... on échange quand tu veux 😄"),
 ]
 
-def entrer(ctx, pseudo, age, gender, region, w=1280, h=760):
+def entrer(ctx, pseudo, age, gender, cp, w=1280, h=760):
     p = ctx.new_page()
     p.set_viewport_size({"width": w, "height": h})
     p.goto(BASE, wait_until="domcontentloaded")
+    p.wait_for_function("() => document.querySelectorAll('#gender option').length > 2", timeout=10000)
     p.fill("#pseudo", pseudo); p.fill("#age", str(age))
-    p.select_option("#gender", gender); p.fill("#region", region)
+    p.select_option("#gender", gender)
+    p.fill("#postal", cp)
+    p.wait_for_function("() => !document.getElementById('city').disabled", timeout=10000)
     p.click("#entry button[type=submit]")
     p.wait_for_url("**/chat", timeout=15000)
     p.wait_for_selector(".room.on", timeout=15000)
@@ -81,7 +86,8 @@ with sync_playwright() as pw:
 
     # thème sombre
     jul = pages["Julien"]
-    jul.click("#theme"); time.sleep(0.5)
+    jul.click("#theme"); time.sleep(0.4)
+    jul.click(".theme-pop button[data-t='violet']"); time.sleep(0.5)
     jul.screenshot(path=f"{SHOTS}/E-sombre.png")
 
     # message privé
@@ -103,7 +109,7 @@ with sync_playwright() as pw:
 
     # mobile, avec la conversation en place
     mob = b.new_context(locale="fr-FR")
-    m = entrer(mob, "Lea", 24, "f", "Normandie", 390, 780)
+    m = entrer(mob, "Lea", 24, "f", "76000", 390, 780)
     time.sleep(1.0)
     m.screenshot(path=f"{SHOTS}/I-mobile.png")
     m.click("#openRooms"); time.sleep(0.5)

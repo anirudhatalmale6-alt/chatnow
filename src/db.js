@@ -37,18 +37,24 @@ const run = async (sql, params = []) => {
 /* Salons livrés par défaut. Ils ne sont insérés qu'une seule fois : si le
    client les renomme ou les supprime depuis l'administration, un redémarrage
    ne doit surtout pas les faire réapparaître. D'où le compteur global. */
+/* Colonnes : slug, nom, description, emoji, type, âge mini, ordre.
+   Type : « text » (par défaut), « audio » (micro) ou « radio » (flux écouté
+   ensemble). L'adresse du flux radio se saisit dans l'administration : elle
+   dépend du site, on ne peut pas en livrer une par défaut. */
 const DEFAULT_ROOMS = [
-  ['general', 'Général', 'Le salon principal, on parle de tout.', '💬', 0, 10],
-  ['rencontres', 'Rencontres', 'Faire connaissance, discuter, se rencontrer.', '💛', 18, 20],
-  ['amitie', 'Amitié', 'Trouver des amis, parler simplement.', '🤝', 0, 30],
-  ['18-25', '18-25 ans', 'Le salon des plus jeunes majeurs.', '🎓', 18, 40],
-  ['25-40', '25-40 ans', 'Discussions entre 25 et 40 ans.', '☕', 18, 50],
-  ['40plus', '40 ans et +', 'Le salon des plus de 40 ans.', '🌿', 18, 60],
-  ['detente', 'Détente', 'Humour, blagues, discussions légères.', '😄', 0, 70],
-  ['musique-cine', 'Musique & Ciné', 'Films, séries, musique, sorties.', '🎬', 0, 80],
-  ['jeux-video', 'Jeux vidéo', 'Consoles, PC, parties en ligne.', '🎮', 0, 90],
-  ['sport', 'Sport', 'Foot, running, salle, tous les sports.', '⚽', 0, 100],
-  ['entraide', 'Aide & Soutien', 'Une oreille attentive, sans jugement.', '💙', 0, 110],
+  ['general', 'Général', 'Le salon principal, on parle de tout.', '💬', 'text', 0, 10],
+  ['rencontres', 'Rencontres', 'Faire connaissance, discuter, se rencontrer.', '💛', 'text', 18, 20],
+  ['amitie', 'Amitié', 'Trouver des amis, parler simplement.', '🤝', 'text', 0, 30],
+  ['micro', 'Salon micro', 'On se parle à la voix, sans caméra.', '🎙️', 'audio', 18, 35],
+  ['radio', 'Radio', 'On écoute la même radio et on en parle.', '📻', 'radio', 0, 38],
+  ['18-25', '18-25 ans', 'Le salon des plus jeunes majeurs.', '🎓', 'text', 18, 40],
+  ['25-40', '25-40 ans', 'Discussions entre 25 et 40 ans.', '☕', 'text', 18, 50],
+  ['40plus', '40 ans et +', 'Le salon des plus de 40 ans.', '🌿', 'text', 18, 60],
+  ['detente', 'Détente', 'Humour, blagues, discussions légères.', '😄', 'text', 0, 70],
+  ['musique-cine', 'Musique & Ciné', 'Films, séries, musique, sorties.', '🎬', 'text', 0, 80],
+  ['jeux-video', 'Jeux vidéo', 'Consoles, PC, parties en ligne.', '🎮', 'text', 0, 90],
+  ['sport', 'Sport', 'Foot, running, salle, tous les sports.', '⚽', 'text', 0, 100],
+  ['entraide', 'Aide & Soutien', 'Une oreille attentive, sans jugement.', '💙', 'text', 0, 110],
 ];
 
 /* Liste de départ du filtre. Volontairement courte et centrée sur ce qui est
@@ -65,6 +71,25 @@ const DEFAULT_WORDS = [
   ['nudes', 'block'], ['snap sexe', 'block'], ['cocaine', 'block'], ['cocaïne', 'block'],
 ];
 
+/* `CREATE TABLE IF NOT EXISTS` ne touche pas une table qui existe déjà : sur
+   une base en service, une colonne ajoutée après coup ne serait jamais créée
+   et le site tomberait sur « Unknown column ». D'où ces deux aides, qui ne
+   font rien quand l'objet est déjà là. */
+async function colonneExiste(table, colonne) {
+  const r = await one(
+    `SELECT 1 AS ok FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, colonne]
+  );
+  return !!r;
+}
+
+async function ajouteColonne(table, colonne, definition) {
+  if (await colonneExiste(table, colonne)) return false;
+  await run(`ALTER TABLE \`${table}\` ADD COLUMN \`${colonne}\` ${definition}`);
+  return true;
+}
+
 async function migrate() {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   const conn = await mysql.createConnection({ ...config.db, multipleStatements: true });
@@ -74,11 +99,22 @@ async function migrate() {
     await conn.end();
   }
 
+  /* Profil (homme, femme, couple, gay…) : une colonne texte plutôt qu'un ENUM,
+     pour qu'ajouter un profil plus tard ne demande aucune migration. */
+  await run("ALTER TABLE visitors MODIFY COLUMN gender VARCHAR(12) NOT NULL DEFAULT 'a'");
+  await ajouteColonne('visitors', 'country', "CHAR(2) NULL AFTER region");
+  await ajouteColonne('visitors', 'postal', "VARCHAR(12) NULL AFTER country");
+  await ajouteColonne('visitors', 'city', "VARCHAR(120) NULL AFTER postal");
+  await ajouteColonne('visitors', 'lat', 'DECIMAL(9,6) NULL AFTER city');
+  await ajouteColonne('visitors', 'lng', 'DECIMAL(9,6) NULL AFTER lat');
+  await ajouteColonne('rooms', 'kind', "VARCHAR(12) NOT NULL DEFAULT 'text' AFTER emoji");
+  await ajouteColonne('rooms', 'stream_url', 'VARCHAR(255) NULL AFTER kind');
+
   const [{ n: nbRooms }] = await query('SELECT COUNT(*) AS n FROM rooms');
   if (Number(nbRooms) === 0) {
     for (const r of DEFAULT_ROOMS) {
       await run(
-        'INSERT INTO rooms (slug,name,description,emoji,min_age,position) VALUES (?,?,?,?,?,?)',
+        'INSERT INTO rooms (slug,name,description,emoji,kind,min_age,position) VALUES (?,?,?,?,?,?,?)',
         r
       );
     }

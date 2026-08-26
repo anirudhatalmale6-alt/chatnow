@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ChatNow — Tchat gratuit, sans inscription</title>
 <meta name="description" content="Tchat en ligne gratuit, instantané et sans inscription. Salons de discussion, messages privés, modération automatique. Aucune publicité.">
-<link rel="stylesheet" href="/css/style.css?v=1">
+<link rel="stylesheet" href="/css/style.css?v=2">
+<script src="/js/theme.js?v=2"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>💬</text></svg>">
 </head>
 <body class="page-home">
@@ -26,6 +27,7 @@
       <ul class="hero-points">
         <li>✅ Aucune inscription, aucun mot de passe</li>
         <li>✅ Messages privés et salons thématiques</li>
+        <li>✅ Les personnes les plus proches de chez vous</li>
         <li>✅ Modération automatique 24 h/24</li>
         <li>✅ Zéro publicité, zéro pisteur</li>
       </ul>
@@ -41,22 +43,25 @@
           <input name="age" id="age" type="number" min="15" max="99" placeholder="25" required>
         </label>
         <label class="f-gender">Je suis
-          <select name="gender" id="gender">
-            <option value="h">Un homme</option>
-            <option value="f">Une femme</option>
-            <option value="a" selected>Je préfère ne pas dire</option>
+          <select name="gender" id="gender"></select>
+        </label>
+        <label class="f-pays">Pays
+          <select name="country" id="country">
+            <option value="FR" selected>France</option>
+            <option value="BE">Belgique</option>
+            <option value="CH">Suisse</option>
+            <option value="LU">Luxembourg</option>
+            <option value="MC">Monaco</option>
           </select>
         </label>
-        <label class="f-region">Région <span class="opt">(facultatif)</span>
-          <input name="region" id="region" maxlength="60" placeholder="Paris, Lyon, Belgique…" list="regions">
-          <datalist id="regions">
-            <option>Auvergne-Rhône-Alpes</option><option>Bourgogne-Franche-Comté</option>
-            <option>Bretagne</option><option>Centre-Val de Loire</option><option>Corse</option>
-            <option>Grand Est</option><option>Hauts-de-France</option><option>Île-de-France</option>
-            <option>Normandie</option><option>Nouvelle-Aquitaine</option><option>Occitanie</option>
-            <option>Pays de la Loire</option><option>Provence-Alpes-Côte d'Azur</option>
-            <option>Outre-mer</option><option>Belgique</option><option>Suisse</option><option>Canada</option>
-          </datalist>
+        <label class="f-cp">Code postal
+          <input name="postal" id="postal" inputmode="numeric" maxlength="10" placeholder="31000" autocomplete="postal-code">
+        </label>
+        <label class="f-ville">Ville
+          <select name="city" id="city" disabled>
+            <option value="">Saisissez votre code postal</option>
+          </select>
+          <small class="hint" id="cityHint">La ville est trouvée automatiquement. Elle sert à vous proposer les personnes les plus proches.</small>
         </label>
       </div>
       <p class="entry-err" id="err" hidden></p>
@@ -77,6 +82,8 @@
       <div class="feat"><span>⚡</span><h3>Messages instantanés</h3><p>Connexion permanente : les messages arrivent sans recharger la page, sans délai.</p></div>
       <div class="feat"><span>✉️</span><h3>Messages privés</h3><p>Cliquez sur un pseudo pour discuter en tête-à-tête, dans un onglet séparé.</p></div>
       <div class="feat"><span>🛡️</span><h3>Modération automatique</h3><p>Insultes filtrées, anti-spam, liens et coordonnées bloqués en public.</p></div>
+      <div class="feat"><span>📍</span><h3>Les plus proches d'abord</h3><p>Votre code postal trouve votre ville, et la liste affiche la distance en kilomètres.</p></div>
+      <div class="feat"><span>🎨</span><h3>Six thèmes de couleurs</h3><p>Clair, sombre, violet, océan, rose, néon. Le vôtre est retenu.</p></div>
       <div class="feat"><span>🙈</span><h3>Ignorer quelqu'un</h3><p>Un clic et vous ne voyez plus ses messages, ni en salon ni en privé.</p></div>
       <div class="feat"><span>🚩</span><h3>Signaler</h3><p>Un bouton sur chaque message. Le signalement arrive directement à la modération.</p></div>
       <div class="feat"><span>📱</span><h3>Sur téléphone aussi</h3><p>Interface pensée pour le mobile : salons et connectés en tiroir latéral.</p></div>
@@ -88,9 +95,10 @@
 
 <footer class="foot">
   <a href="/regles.html">Règles</a> · <a href="/confidentialite.html">Confidentialité</a> ·
-  <span class="muted">ChatNow — tchat gratuit sans inscription</span>
+  <span class="muted">ChatNow — tchat gratuit sans inscription</span><br>
+  <span class="muted" style="font-size:12px">Données des villes : GeoNames, licence CC BY 4.0 — données modifiées.</span>
 </footer>
 
-<script src="/js/home.js?v=1"></script>
+<script src="/js/home.js?v=2"></script>
 </body>
 </html>

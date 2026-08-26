@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Tchat — ChatNow</title>
-<link rel="stylesheet" href="/css/style.css?v=1">
+<link rel="stylesheet" href="/css/style.css?v=2">
+<script src="/js/theme.js?v=2"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>💬</text></svg>">
 </head>
 <body class="page-chat">
@@ -38,6 +39,10 @@
       <div class="tabs" id="tabs"></div>
       <button class="ghost only-mobile" id="openUsers" type="button" aria-label="Connectés">👥</button>
     </header>
+
+    <!-- barre des salons audio / radio, masquée dans les salons texte -->
+    <div class="audio-bar" id="audioBar" hidden></div>
+    <div class="voix" id="voix" hidden></div>
 
     <div class="messages" id="messages" aria-live="polite"></div>
 
@@ -101,6 +106,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/chat.js?v=1"></script>
+<script src="/js/voix.js?v=2"></script>
+<script src="/js/chat.js?v=2"></script>
 </body>
 </html>

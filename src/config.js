@@ -50,6 +50,21 @@ const config = {
     maxAge: int(process.env.MAX_AGE, 99),
   },
 
+  /* Salons audio. Le son circule directement entre les navigateurs : chaque
+     personne au micro envoie son flux à toutes les autres. Au-delà d'une
+     dizaine, la connexion des participants sature bien avant le serveur —
+     d'où cette limite, réglable mais volontairement basse. */
+  voiceMaxSpeakers: int(process.env.VOICE_MAX_SPEAKERS, 8),
+  /* Serveurs STUN : ils servent à découvrir son adresse publique pour que
+     deux navigateurs derrière des box puissent se joindre. Aucune donnée ni
+     aucun son n'y transite. Certains réseaux d'entreprise exigent en plus un
+     serveur TURN — voir le README. */
+  iceServers: (process.env.ICE_SERVERS || 'stun:stun.l.google.com:19302')
+    .split(',').map((s) => s.trim()).filter(Boolean)
+    .map((url) => (url.startsWith('turn') && process.env.TURN_USER
+      ? { urls: url, username: process.env.TURN_USER, credential: process.env.TURN_PASSWORD || '' }
+      : { urls: url })),
+
   /* RGPD : les messages ne sont pas conservés indéfiniment. */
   retentionDays: int(process.env.RETENTION_DAYS, 30),
   historyMessages: int(process.env.HISTORY_MESSAGES, 50),
