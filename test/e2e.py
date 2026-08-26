@@ -4,12 +4,25 @@ message privé, « est en train d'écrire », signalement, mobile, administratio
 Chaque étape est VÉRIFIÉE dans l'autre navigateur : un message qui s'affiche
 chez celui qui l'écrit ne prouve rien, il peut n'être jamais parti.
 """
-import sys, time, os
+import sys, time, os, io
 from playwright.sync_api import sync_playwright, expect
 
 BASE = os.environ.get("BASE", "http://127.0.0.1:3011")
-SHOTS = os.environ.get("SHOTS", "/var/lib/freelancer/projects/40562019/chatnow/test/shots")
+SHOTS = os.environ.get("SHOTS", os.path.join(os.path.dirname(__file__), "shots"))
 os.makedirs(SHOTS, exist_ok=True)
+
+def env(cle, defaut=""):
+    """Le mot de passe d'administration est lu dans .env, jamais écrit ici :
+    un mot de passe en dur dans un fichier suivi par Git finit toujours par
+    être pris pour le vrai."""
+    if os.environ.get(cle):
+        return os.environ[cle]
+    chemin = os.path.join(os.path.dirname(__file__), "..", ".env")
+    if os.path.exists(chemin):
+        for ligne in io.open(chemin, encoding="utf-8"):
+            if ligne.strip().startswith(cle + "="):
+                return ligne.split("=", 1)[1].strip()
+    return defaut
 
 ok, fails = 0, []
 def check(label, cond):
@@ -235,7 +248,7 @@ with sync_playwright() as pw:
     ADM.click("form button")
     ADM.wait_for_timeout(500)
     check("mauvais mot de passe refusé", "err=1" in ADM.url or "incorrect" in ADM.content())
-    ADM.fill("input[name=password]", os.environ.get("ADMIN_PASSWORD", "demo-admin-2026"))
+    ADM.fill("input[name=password]", env("ADMIN_PASSWORD"))
     ADM.click("form button")
     ADM.wait_for_timeout(800)
     check("tableau de bord accessible", "Tableau de bord" in ADM.inner_text("h1"))
