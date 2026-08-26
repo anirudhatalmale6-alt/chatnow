@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChatNow — Tchat gratuit, sans inscription</title>
+<meta name="description" content="Tchat en ligne gratuit, instantané et sans inscription. Salons de discussion, messages privés, modération automatique. Aucune publicité.">
+<link rel="stylesheet" href="/css/style.css?v=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>💬</text></svg>">
+</head>
+<body class="page-home">
+
+<header class="top">
+  <a class="logo" href="/"><span class="logo-mark">💬</span> ChatNow</a>
+  <div class="top-right">
+    <span class="dot-live"><i></i><b id="online">0</b> en ligne</span>
+    <button class="ghost" id="theme" type="button" title="Thème clair / sombre">🌙</button>
+  </div>
+</header>
+
+<main class="home">
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Le tchat, tout de suite.</h1>
+      <p class="lead">Gratuit, instantané, sans inscription. Choisissez un pseudo, entrez dans un salon, et discutez.</p>
+      <ul class="hero-points">
+        <li>✅ Aucune inscription, aucun mot de passe</li>
+        <li>✅ Messages privés et salons thématiques</li>
+        <li>✅ Modération automatique 24 h/24</li>
+        <li>✅ Zéro publicité, zéro pisteur</li>
+      </ul>
+    </div>
+
+    <form class="entry card" id="entry" autocomplete="off">
+      <h2>Entrer dans le tchat</h2>
+      <div class="entry-grid">
+        <label class="f-pseudo">Pseudo
+          <input name="pseudo" id="pseudo" maxlength="24" placeholder="Votre pseudo" required autofocus>
+        </label>
+        <label class="f-age">Âge
+          <input name="age" id="age" type="number" min="15" max="99" placeholder="25" required>
+        </label>
+        <label class="f-gender">Je suis
+          <select name="gender" id="gender">
+            <option value="h">Un homme</option>
+            <option value="f">Une femme</option>
+            <option value="a" selected>Je préfère ne pas dire</option>
+          </select>
+        </label>
+        <label class="f-region">Région <span class="opt">(facultatif)</span>
+          <input name="region" id="region" maxlength="60" placeholder="Paris, Lyon, Belgique…" list="regions">
+          <datalist id="regions">
+            <option>Auvergne-Rhône-Alpes</option><option>Bourgogne-Franche-Comté</option>
+            <option>Bretagne</option><option>Centre-Val de Loire</option><option>Corse</option>
+            <option>Grand Est</option><option>Hauts-de-France</option><option>Île-de-France</option>
+            <option>Normandie</option><option>Nouvelle-Aquitaine</option><option>Occitanie</option>
+            <option>Pays de la Loire</option><option>Provence-Alpes-Côte d'Azur</option>
+            <option>Outre-mer</option><option>Belgique</option><option>Suisse</option><option>Canada</option>
+          </datalist>
+        </label>
+      </div>
+      <p class="entry-err" id="err" hidden></p>
+      <button class="btn big" type="submit">Entrer dans le tchat →</button>
+      <p class="fine">En entrant vous acceptez <a href="/regles.html">les règles du tchat</a>.
+        Un seul cookie est déposé, strictement nécessaire au service : il retient votre pseudo, rien d'autre.</p>
+    </form>
+  </section>
+
+  <section class="rooms-preview">
+    <h2>Les salons</h2>
+    <div class="room-cards" id="rooms"><p class="muted">Chargement…</p></div>
+  </section>
+
+  <section class="features">
+    <h2>Ce que vous pouvez faire</h2>
+    <div class="feat-grid">
+      <div class="feat"><span>⚡</span><h3>Messages instantanés</h3><p>Connexion permanente : les messages arrivent sans recharger la page, sans délai.</p></div>
+      <div class="feat"><span>✉️</span><h3>Messages privés</h3><p>Cliquez sur un pseudo pour discuter en tête-à-tête, dans un onglet séparé.</p></div>
+      <div class="feat"><span>🛡️</span><h3>Modération automatique</h3><p>Insultes filtrées, anti-spam, liens et coordonnées bloqués en public.</p></div>
+      <div class="feat"><span>🙈</span><h3>Ignorer quelqu'un</h3><p>Un clic et vous ne voyez plus ses messages, ni en salon ni en privé.</p></div>
+      <div class="feat"><span>🚩</span><h3>Signaler</h3><p>Un bouton sur chaque message. Le signalement arrive directement à la modération.</p></div>
+      <div class="feat"><span>📱</span><h3>Sur téléphone aussi</h3><p>Interface pensée pour le mobile : salons et connectés en tiroir latéral.</p></div>
+      <div class="feat"><span>🚫</span><h3>Zéro publicité</h3><p>Aucun bandeau, aucun pisteur, aucune revente de données.</p></div>
+      <div class="feat"><span>🗑️</span><h3>Rien de conservé</h3><p>Les messages sont effacés automatiquement au bout de 30 jours.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <a href="/regles.html">Règles</a> · <a href="/confidentialite.html">Confidentialité</a> ·
+  <span class="muted">ChatNow — tchat gratuit sans inscription</span>
+</footer>
+
+<script src="/js/home.js?v=1"></script>
+</body>
+</html>

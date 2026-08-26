@@ -1,0 +1,25 @@
+{
+  "name": "chatnow",
+  "version": "1.0.0",
+  "description": "Tchat en ligne gratuit, instantané et sans inscription (Node.js + WebSocket)",
+  "main": "server.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test/moderation.test.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mysql2": "^3.24.2",
+    "socket.io": "^4.8.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}
