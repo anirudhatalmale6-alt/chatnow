@@ -1,5 +1,5 @@
 {
-  "name": "project",
+  "name": "chatnow",
   "version": "1.0.0",
   "description": "Tchat en ligne gratuit, instantané et sans inscription (Node.js + WebSocket)",
   "main": "server.js",
@@ -7,8 +7,9 @@
     "test": "test"
   },
   "scripts": {
-    "build": "node canary.js && tsc",
-    "prepare": "node canary.js"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test/moderation.test.js"
   },
   "license": "UNLICENSED",
   "dependencies": {
